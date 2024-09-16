@@ -46,3 +46,4 @@ workflows:
             branches:
               only:
                 - main
+                - feature/align-fork-with-origin

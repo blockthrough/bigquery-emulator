@@ -12,7 +12,6 @@ build:
 	CGO_ENABLED=1 CXX=clang++ go build \
 		-o $(BIN_PATH)/bigquery-emulator \
 		-ldflags='-s -w -X main.version=${VERSION} -X main.revision=${REVISION} ${STATIC_LINK_FLAG}' \
-		-toolexec 'gtime -v' \
 		./cmd/bigquery-emulator
 
 docker-build:
