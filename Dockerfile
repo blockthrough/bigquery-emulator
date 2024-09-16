@@ -1,4 +1,4 @@
-FROM golang:1.18.3-bullseye
+FROM golang:1.22.7-bullseye
 
 ARG VERSION
 
@@ -11,7 +11,7 @@ RUN go mod download
 
 COPY . ./
 
-RUN make emulator/build
+RUN make build
 
 FROM debian:bullseye AS emulator
 

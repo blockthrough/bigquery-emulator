@@ -27,12 +27,13 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
+	"github.com/parquet-go/parquet-go"
+
 	"github.com/goccy/bigquery-emulator/internal/connection"
 	"github.com/goccy/bigquery-emulator/internal/logger"
 	"github.com/goccy/bigquery-emulator/internal/metadata"
 	internaltypes "github.com/goccy/bigquery-emulator/internal/types"
 	"github.com/goccy/bigquery-emulator/types"
-	"github.com/segmentio/parquet-go"
 )
 
 func errorResponse(ctx context.Context, w http.ResponseWriter, e *ServerError) {
@@ -53,8 +54,9 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 }
 
 const (
-	discoveryAPIEndpoint = "/discovery/v1/apis/bigquery/v2/rest"
-	uploadAPIEndpoint    = "/upload/bigquery/v2/projects/{projectId}/jobs"
+	discoveryAPIEndpoint    = "/discovery/v1/apis/bigquery/v2/rest"
+	newDiscoveryAPIEndpoint = "/$discovery/rest"
+	uploadAPIEndpoint       = "/upload/bigquery/v2/projects/{projectId}/jobs"
 )
 
 //go:embed resources/discovery.json
@@ -1036,7 +1038,7 @@ func (h *jobsInsertHandler) tableDefFromQueryResponse(tableID string, response *
 	for _, row := range response.Rows {
 		rowData, err := row.Data()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get row data: %w", err)
+			return nil, err
 		}
 		data = append(data, rowData)
 	}
@@ -1062,6 +1064,7 @@ func (h *jobsInsertHandler) importFromGCS(ctx context.Context, r *jobsInsertRequ
 		opts = append(
 			opts,
 			option.WithEndpoint(fmt.Sprintf("%s/storage/v1/", host)),
+			storage.WithJSONReads(),
 			option.WithoutAuthentication(),
 		)
 	}
@@ -1420,6 +1423,22 @@ func (h *jobsInsertHandler) Handle(ctx context.Context, r *jobsInsertRequest) (*
 			if err != nil {
 				return nil, err
 			}
+			destinationDataset := r.project.Dataset(tableRef.DatasetId)
+			if destinationDataset == nil {
+				return nil, fmt.Errorf("failed to find destination dataset: %s", tableRef.DatasetId)
+			}
+			destinationTable := destinationDataset.Table(tableRef.TableId)
+			destinationTableExists := destinationTable != nil
+			if !destinationTableExists {
+				_, err := createTableMetadata(ctx, tx, r.server, r.project, destinationDataset, tableDef.ToBigqueryV2(r.project.ID, tableRef.DatasetId))
+				if err != nil {
+					return nil, fmt.Errorf("failed to create table: %w", err)
+				}
+				serverErr := r.server.contentRepo.CreateTable(ctx, tx, tableDef.ToBigqueryV2(r.project.ID, tableRef.DatasetId))
+				if serverErr != nil {
+					return nil, fmt.Errorf("failed to create table: %w", serverErr)
+				}
+			}
 			if err := r.server.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef); err != nil {
 				return nil, fmt.Errorf("failed to add table data: %w", err)
 			}
@@ -1593,7 +1612,7 @@ func (h *jobsInsertHandler) addQueryResultToDynamicDestinationTable(ctx context.
 
 	tableDef, err := h.tableDefFromQueryResponse(tableID, response)
 	if err != nil {
-		return fmt.Errorf("failed to create table definition from query: %w", err)
+		return err
 	}
 	tableDef.SetupMetadata(projectID, datasetID)
 	table := metadata.NewTable(r.server.metaRepo, projectID, datasetID, tableID, tableDef.Metadata)
@@ -1613,13 +1632,13 @@ func (h *jobsInsertHandler) addQueryResultToDynamicDestinationTable(ctx context.
 		nil,
 	)
 	if err := r.project.AddDataset(ctx, tx.Tx(), dataset); err != nil {
-		return fmt.Errorf("failed to add dataset: %w", err)
+		return err
 	}
 	if err := r.server.metaRepo.AddTable(ctx, tx.Tx(), table); err != nil {
-		return fmt.Errorf("failed to add table: %w", err)
+		return err
 	}
 	if err := r.server.contentRepo.CreateTable(ctx, tx, tableDef.ToBigqueryV2(projectID, datasetID)); err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
+		return err
 	}
 	if err := r.server.contentRepo.AddTableData(ctx, tx, projectID, datasetID, tableDef); err != nil {
 		return fmt.Errorf("failed to add table data: %w", err)
@@ -1672,11 +1691,16 @@ func (h *jobsQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		errorResponse(ctx, w, errInvalid(err.Error()))
 		return
 	}
+	useInt64Timestamp := false
+	if options := req.FormatOptions; options != nil {
+		useInt64Timestamp = options.UseInt64Timestamp
+	}
+	useInt64Timestamp = useInt64Timestamp || isFormatOptionsUseInt64Timestamp(r)
 	res, err := h.Handle(ctx, &jobsQueryRequest{
 		server:            server,
 		project:           project,
 		queryRequest:      &req,
-		useInt64Timestamp: isFormatOptionsUseInt64Timestamp(r),
+		useInt64Timestamp: useInt64Timestamp,
 	})
 	if err != nil {
 		errorResponse(ctx, w, errJobInternalError(err.Error()))
@@ -2341,10 +2365,11 @@ func (h *tabledataListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	dataset := datasetFromContext(ctx)
 	table := tableFromContext(ctx)
 	res, err := h.Handle(ctx, &tabledataListRequest{
-		server:  server,
-		project: project,
-		dataset: dataset,
-		table:   table,
+		server:            server,
+		project:           project,
+		dataset:           dataset,
+		table:             table,
+		useInt64Timestamp: isFormatOptionsUseInt64Timestamp(r),
 	})
 	if err != nil {
 		errorResponse(ctx, w, errInternalError(err.Error()))
@@ -2354,10 +2379,11 @@ func (h *tabledataListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 type tabledataListRequest struct {
-	server  *Server
-	project *metadata.Project
-	dataset *metadata.Dataset
-	table   *metadata.Table
+	server            *Server
+	project           *metadata.Project
+	dataset           *metadata.Dataset
+	table             *metadata.Table
+	useInt64Timestamp bool
 }
 
 func (h *tabledataListHandler) Handle(ctx context.Context, r *tabledataListRequest) (*internaltypes.TableDataList, error) {
@@ -2381,8 +2407,9 @@ func (h *tabledataListHandler) Handle(ctx context.Context, r *tabledataListReque
 	if err != nil {
 		return nil, err
 	}
+
 	return &internaltypes.TableDataList{
-		Rows:      response.Rows,
+		Rows:      internaltypes.Format(response.Schema, response.Rows, r.useInt64Timestamp),
 		TotalRows: response.TotalRows,
 	}, nil
 }

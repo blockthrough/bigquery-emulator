@@ -14,10 +14,11 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"github.com/gorilla/mux"
+
 	"github.com/goccy/bigquery-emulator/internal/connection"
 	"github.com/goccy/bigquery-emulator/internal/contentdata"
 	"github.com/goccy/bigquery-emulator/internal/metadata"
-	"github.com/gorilla/mux"
 )
 
 type Server struct {
@@ -79,6 +80,7 @@ func New(storage Storage) (*Server, error) {
 		r.Handle(fmt.Sprintf("/bigquery/v2%s", handler.Path), handler.Handler).Methods(handler.HTTPMethod)
 	}
 	r.Handle(discoveryAPIEndpoint, newDiscoveryHandler(server)).Methods("GET")
+	r.Handle(newDiscoveryAPIEndpoint, newDiscoveryHandler(server)).Methods("GET")
 	r.Handle(uploadAPIEndpoint, &uploadHandler{}).Methods("POST")
 	r.Handle(uploadAPIEndpoint, &uploadContentHandler{}).Methods("PUT")
 	r.PathPrefix("/").Handler(&defaultHandler{})
@@ -212,7 +214,7 @@ func (s *Server) Serve(ctx context.Context, httpAddr, grpcAddr string) error {
 	httpServer := &http.Server{
 		Handler:      s.Handler,
 		Addr:         httpAddr,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 5 * time.Minute,
 		ReadTimeout:  15 * time.Second,
 	}
 	s.httpServer = httpServer

@@ -18,7 +18,7 @@ docker-build:
 	docker \
 		build \
 		-t bigquery-emulator \
-		-t us.gcr.io/marble-light-dev/bigquery-emulator:latest \
+		-t us.gcr.io/marble-light-dev/bigquery-emulator:test-merge \
 		--build-arg VERSION=$(VERSION) \
 		--platform=$(DOCKER_PLATFORM) \
 		.
