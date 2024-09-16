@@ -2,14 +2,15 @@ package server
 
 import (
 	"bytes"
-	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
 	"context"
 	"fmt"
-	"google.golang.org/protobuf/types/known/anypb"
 	"io"
 	"strings"
 	"sync"
 	"time"
+
+	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/array"
