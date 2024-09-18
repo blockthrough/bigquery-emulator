@@ -399,10 +399,9 @@ func (r *Repository) AddTableData(ctx context.Context, tx *connection.Tx, projec
 
 		for _, column := range columns {
 			if value, found := data[column.Name]; found {
-				isTimestampColumn := column.Type == types.TIMESTAMP
 				inputString, isInputString := value.(string)
 
-				if isInputString && isTimestampColumn {
+				if isInputString && column.Type == types.TIMESTAMP {
 					parsedTimestamp, err := zetasqlite.TimeFromTimestampValue(inputString)
 					// If we could parse the timestamp, use it when inserting, otherwise fallback to the supplied value
 					if err == nil {

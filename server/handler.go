@@ -1427,9 +1427,7 @@ func (h *jobsInsertHandler) Handle(ctx context.Context, r *jobsInsertRequest) (*
 			if destinationDataset == nil {
 				return nil, fmt.Errorf("failed to find destination dataset: %s", tableRef.DatasetId)
 			}
-			destinationTable := destinationDataset.Table(tableRef.TableId)
-			destinationTableExists := destinationTable != nil
-			if !destinationTableExists {
+			if destinationDataset.Table(tableRef.TableId) == nil {
 				_, err := createTableMetadata(ctx, tx, r.server, r.project, destinationDataset, tableDef.ToBigqueryV2(r.project.ID, tableRef.DatasetId))
 				if err != nil {
 					return nil, fmt.Errorf("failed to create table: %w", err)
