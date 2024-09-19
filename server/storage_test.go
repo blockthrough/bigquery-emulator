@@ -3,7 +3,6 @@ package server_test
 
 import (
 	"bytes"
-	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
 	"context"
 	"fmt"
 	"io"
@@ -13,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
+
 	"cloud.google.com/go/bigquery"
 	bqStorage "cloud.google.com/go/bigquery/storage/apiv1"
 	"cloud.google.com/go/bigquery/storage/managedwriter"
@@ -21,7 +22,6 @@ import (
 	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/ipc"
 	"github.com/apache/arrow/go/v10/arrow/memory"
-	"github.com/goccy/bigquery-emulator/server"
 	"github.com/goccy/go-json"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/linkedin/goavro/v2"
@@ -32,6 +32,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/goccy/bigquery-emulator/server"
 
 	"github.com/goccy/bigquery-emulator/types"
 )
